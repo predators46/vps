@@ -14,7 +14,7 @@ DAEMON=/usr/sbin/chilli
 NAME=chilli
 DESC=chilli
 
-START_CHILLI=0
+START_CHILLI=1
 
 if [ -f /etc/default/chilli ] ; then
    . /etc/default/chilli
@@ -31,7 +31,7 @@ test -f $DAEMON || exit 0
 
 MULTI=$(ls /etc/chilli/*/chilli.conf 2>/dev/null)
 [ -z "$DHCPIF" ] && [ -n "$MULTI" ] && {
-    for c in $MULTI; 
+    for c in $MULTI;
     do
 	echo "Found configuration $c"
 	DHCPIF=$(basename $(echo $c|sed 's#/chilli.conf##'))
@@ -63,11 +63,11 @@ case "$1" in
 	echo -n "Starting $DESC: "
 	/sbin/modprobe tun >/dev/null 2>&1
 	echo 1 > /proc/sys/net/ipv4/ip_forward
-	
+
 	writeconfig
 	radiusconfig
-	
-	test ${HS_ADMINTERVAL:-0} -gt 0 && {	
+
+	test ${HS_ADMINTERVAL:-0} -gt 0 && {
             (crontab -l 2>&- | grep -v $0
 		echo "*/$HS_ADMINTERVAL * * * * $0 radconfig"
 		) | crontab - 2>&-
@@ -75,61 +75,43 @@ case "$1" in
 
 	ifconfig $HS_LANIF 0.0.0.0
 
-	start-stop-daemon --start --quiet --pidfile /var/run/$NAME.$HS_LANIF.pid \
-		--exec $DAEMON -- -c $CONFIG
-	RETVAL=$?
-	echo "$NAME."
+        $DAEMON -c $CONFIG --pidfile /var/run/$NAME.$HS_LANIF.pid &
+        sleep 5
 	;;
-    
-    checkrunning)
-	check=`start-stop-daemon --start --exec $DAEMON --test`
-	if [ x"$check" != x"$DAEMON already running." ] ; then
-            $0 start
-	fi
-	;;
-    
+
     radconfig)
 	[ -e $MAIN_CONF ] || writeconfig
 	radiusconfig
 	;;
-    
+
     restart)
 	$0 stop
 	sleep 1
 	$0 start
 	RETVAL=$?
 	;;
-    
+
     stop)
 	echo -n "Stopping $DESC: "
-	
+
 	crontab -l 2>&- | grep -v $0 | crontab -
-	
-	
-	start-stop-daemon --oknodo --stop --quiet --pidfile /var/run/$NAME.$HS_LANIF.pid \
-	    --exec $DAEMON
-	echo "$NAME."
+        kill $(cat /var/run/$NAME.$HS_LANIF.pid)
+        rm /var/run/$NAME.$HS_LANIF*
+        sleep 3
 	;;
-    
+
     reload)
-	echo "Reloading $DESC."
-	start-stop-daemon --stop --signal 1 --quiet --pidfile \
-	    /var/run/$NAME.$HS_LANIF.pid --exec $DAEMON
+        $0 stop
+        sleep 1
+        $0 start
+        RETVAL=$?
 	;;
-    
-    condrestart)
-	check=`start-stop-daemon --start --exec $DAEMON --test`
-	if [ x"$check" != x"$DAEMON already running." ] ; then
-            $0 restart
-            RETVAL=$?
-	fi
-	;;
-    
+
     status)
 	status chilli
 	RETVAL=$?
 	;;
-    
+
     *)
 	N=/etc/init.d/$NAME
 	echo "Usage: $N {start|stop|restart|condrestart|status|reload|radconfig}" >&2
